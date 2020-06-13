@@ -33,16 +33,12 @@ def Kuu_matern12_fourierfeatures1d(inducing_variable, kernel, jitter=None):
 
     # Cosine block:
     lamb = 1.0 / kernel.lengthscales
-    print("lambda is: %2.2f" % lamb)
     two_or_four = to_default_float(tf.where(omegas == 0, 2.0, 4.0))
     d_cos = (
         (b - a) * (tf.square(lamb) + tf.square(omegas)) / lamb / kernel.variance / two_or_four
     )  # eq. (111)
     v_cos = tf.ones_like(d_cos) / tf.sqrt(kernel.variance)  # eq. (110)
     cosine_block = LowRank(Diag(d_cos), v_cos[:, None])
-    print("shpae")
-    print(cosine_block.to_dense().shape)
-    print(cosine_block.to_dense())
 
     # Sine block:
     omegas = omegas[tf.not_equal(omegas, 0)]  # the sine block does not include omega=0
