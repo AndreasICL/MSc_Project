@@ -8,7 +8,6 @@ from gpflow import covariances as cov
 from gpflow import kullback_leiblers as kl
 from gpflow.ci_utils import ci_niter
 
-print("helloworld")
 BlockDiag = tf.linalg.LinearOperatorBlockDiag
 Diag = tf.linalg.LinearOperatorDiag
 LowRank = tf.linalg.LinearOperatorLowRankUpdate
