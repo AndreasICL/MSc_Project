@@ -1,4 +1,9 @@
 from scipy.stats import rv_continuous
+import numpy as np
+import tensorflow as tf
+import gpflow
+from gpflow import covariances as cov
+from gpflow.base import TensorLike
 
 b = 6
 a = 0
