@@ -4,6 +4,7 @@ import tensorflow as tf
 import gpflow
 from gpflow import covariances as cov
 from gpflow.base import TensorLike
+from gpflow.config import default_float, default_jitter
 
 b = 6
 a = 0
