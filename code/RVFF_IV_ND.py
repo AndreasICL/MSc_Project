@@ -29,28 +29,30 @@ class RVFF_ND(gpflow.inducing_variables.InducingVariables):
         """ number of inducing variables (defines dimensionality of q(u)) """
         return self.length  # M^D sine components
 
-@cov.Kuf.register(RVFF_ND, gpflow.kernels.Matern12, TensorLike)
+@cov.Kuf.register(RVFF_ND, gpflow.kernels.Product, TensorLike)
 def Kuf_matern12_RVFF_ND(inducing_variable, kernel: gpflow.kernels.Product, X):
     # X = tf.squeeze(X, axis=1)
     a, omegas, phis = (lambda u: (u.a, u.omegas, u.phis))(inducing_variable)
 
-    resuls = []
+    results = []
+
+    print(X[:, 0].shape)
 
     for i in range(inducing_variable.dim):
-        results.append( tf.sin( omegas[:, None] * ( X[i][None, :] - a + phis[:, None] ) ) )
+        results.append( tf.sin( omegas[:, None] * ( X[:, i][None, :] - a + phis[:, None] ) ) )
 
-    print(results)
+    print(results[0].shape)
 
     # phis = tf.tile(tf.reshape(phis, (-1,1)), [1, len(X)])
     # omegas = tf.tile(tf.reshape(omegas, (-1,1)), [1, len(X)])
     # zeroOmegas = tf.sin( phis )
 
     # res = tf.where( omegas != 0, nonZeroOmegas, zeroOmegas )
-    finalResult = tf.ones(inducing_variable.dim)
-    
-    for result in results:
-        finalResult = np.kron(finalResult, result)
+    finalResult = results[0]
 
-    print(finalResult)
+    for i in range( len(results) - 1 ):
+        finalResult = np.kron(finalResult, results[i + 1])
+
+    print(finalResult.shape)
 
     return finalResult
