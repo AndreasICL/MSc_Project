@@ -131,7 +131,7 @@ def test_predictive_cov_is_psd(model):
 
 def loadModel(path):
     with open(path, 'rb') as fp:
-        param_dict = pickle.load(fp)
+        # param_dict = pickle.load(fp)
         omegas = pickle.load(fp)
         phis = pickle.load(fp)
         likelihoodVariance = pickle.load(fp)

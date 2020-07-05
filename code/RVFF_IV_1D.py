@@ -32,11 +32,12 @@ class matern12PowerSpectrum(rv_continuous):
 p = matern12PowerSpectrum(mu, a, b, resolution)
 
 class RVFF_1D(gpflow.inducing_variables.InducingVariables):
-    def __init__(self, a, b, M):
+    def __init__(self, a, b, M, jitter=None):
         self.length = M
         # [a, b] defining the interval of the Fourier representation:
         self.a = gpflow.Parameter(a, dtype=gpflow.default_float())
         self.b = gpflow.Parameter(b, dtype=gpflow.default_float())
+        self.jitter = jitter
 
         self.phis = gpflow.Parameter(np.random.uniform(0, 2 * np.pi, size=M))
         self.omegas = gpflow.Parameter(np.random.uniform(0, 0.5 * M, size=M))
@@ -91,11 +92,24 @@ def Kuu_matern12_RVFF_1D(inducing_variable, kernel, jitter=None):
                                 ( coeff3 * tf.sin( angle6 ) ) +
                                 lambda_ * tf.cos( angle6 ) ) / denom
 
-      firstTermForZeroOmegas = tf.reshape(tf.Variable(intervalLen * lambda_ / kernelVar / 2), shape=(-1))
+      firstTermForZeroBothOmegas = tf.reshape(tf.Variable(intervalLen * lambda_ / kernelVar / 2), shape=(-1))
+
+      firstTermForZeroOmegas = 0.0
+
+      firstTermForOppositeOmegas = ( coeff4 * tf.sin( angle5 ) -
+                                     coeff5 * tf.cos( omegas * (phis[:, None] - phis[None, :]) ) +
+                                     lambda_ * tf.cos( angle5 ) -
+                                     coeff4 * tf.sin( angle6 ) -
+                                     lambda_ * tf.cos( angle6 ) ) / denom
 
       firstTerm = tf.where( denom1 == 1.0, firstTermForEqualOmegas, firstTerm )
-      firstTerm = tf.where( denom3 == 1.0, 0.0, firstTerm )
-      firstTerm = tf.where( denom2 == 1.0, firstTermForZeroOmegas, firstTerm )
+      firstTerm = tf.where( denom3 == 1.0, firstTermForZeroOmegas, firstTerm )
+      firstTerm = tf.where( denom2 == 1.0, firstTermForOppositeOmegas, firstTerm )
+      firstTerm = tf.where( denom2 == 1.0, tf.where( denom1 == 1.0, firstTermForZeroBothOmegas, firstTerm ), firstTerm )
+
+      # firstTerm = tf.where( denom1 == 1.0, firstTermForEqualOmegas, firstTerm )
+      # firstTerm = tf.where( denom3 == 1.0, 0.0, firstTerm )
+      # firstTerm = tf.where( denom2 == 1.0, firstTermForZeroOmegas, firstTerm )
 
       secondTermfactors = tf.where( denom3 != 1.0, tf.sin( omegas * phis ), tf.sin( phis ) )
 
@@ -104,8 +118,8 @@ def Kuu_matern12_RVFF_1D(inducing_variable, kernel, jitter=None):
       res = firstTerm + secondTerm
       res = 0.5 * (res + tf.transpose(res))
 
-      if jitter != None:
-        res = res + tf.cast(tf.linalg.diag( jitter * tf.ones( res.shape[0] ) ), default_float())
+      if inducing_variable.jitter != None:
+        res = res + tf.cast(tf.linalg.diag( inducing_variable.jitter * tf.ones( res.shape[0] ) ), default_float())
 
       return res
 
