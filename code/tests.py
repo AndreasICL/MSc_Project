@@ -1,10 +1,15 @@
+from gpflow.config import default_float, default_jitter
+import matplotlib.pyplot as plt
+from shutil import copyfile, rmtree
+
 import numpy as np
 import tensorflow as tf
 import gpflow
 import pickle
+import os
 
 import VFF_IV
-import RVFF_IV_1D
+from RVFF_IV_1D import RVFF_1D
 
 # ===================================================================
 # Testing whether the model is the equivalent to Variational Fourier
@@ -17,8 +22,10 @@ def testFeatureequivalence(tol):
   VFFlength = 10
   RVFFlength = 2 * VFFlength - 1
 
+  kernel = gpflow.kernels.Matern12(variance=1.0, lengthscales=0.7)
+
   VFFinducingVar = VFF_IV.FourierFeatures1D(0, 6, VFFlength)
-  VFFmodel = gpflow.models.SGPR((X, Y), kernel2, VFFinducingVar)
+  VFFmodel = gpflow.models.SGPR((X, Y), kernel, VFFinducingVar)
 
   RVFFinducingVar = RVFF_1D(0, 6, RVFFlength)
 
@@ -29,7 +36,7 @@ def testFeatureequivalence(tol):
   RVFFinducingVar.omegas.assign( RVFFfrequencies )
   RVFFinducingVar.phis.assign( RVFFphases )
 
-  RVFFmodel = gpflow.models.SGPR((X, Y), kernel2, RVFFinducingVar)
+  RVFFmodel = gpflow.models.SGPR((X, Y), kernel, RVFFinducingVar)
 
   meanVFF, covVFF = VFFmodel.predict_f(Xtest, True, False)
   meanRVFF, covRVFF = RVFFmodel.predict_f(Xtest, True, False)
@@ -47,10 +54,16 @@ def testFeatureequivalence(tol):
 # ===================================================================
 
 def testPriorEqualsPosterior():
+
+  kernel = gpflow.kernels.Matern12(variance=1.0, lengthscales=0.7)
+  likelihood = gpflow.likelihoods.Gaussian()
+
+  inducing_variable = RVFF_1D( a=0, b=6, M=100 )
+
   model = gpflow.models.SVGP(
       kernel=kernel, likelihood=likelihood, inducing_variable=inducing_variable
   )
-  q_sqrt = tf.linalg.cholesky( Kuu_matern12_RVFF_1D(model.inducing_variable, model.kernel) )
+  q_sqrt = tf.linalg.cholesky( gpflow.covariances.Kuu(model.inducing_variable, model.kernel) )
 
   return model.prior_kl()
 
@@ -135,10 +148,13 @@ def loadModel(path):
         omegas = pickle.load(fp)
         phis = pickle.load(fp)
         likelihoodVariance = pickle.load(fp)
+        param_dict = [omegas, phis, likelihoodVariance]
 
-    inducing_variable = RVFF_1D( a=0, b=6, M=M )
+    inducing_variable = RVFF_1D( a=0, b=6, M=len(omegas.numpy()) )
     inducing_variable.omegas = omegas
     inducing_variable.phis = phis
+
+    kernel = gpflow.kernels.Matern12(variance=1.0, lengthscales=0.7)
 
     model = gpflow.models.SGPR((X, Y), kernel=kernel, inducing_variable=inducing_variable)
     model.likelihood.variance = likelihoodVariance
@@ -154,6 +170,66 @@ def loadModel(path):
 
     return model
 
+def plot(Xtest, models):
+
+  for (mean, std, meanColour, stdColour) in models:
+    plt.plot(Xtest, mean, color=meanColour)
+
+    plt.plot(Xtest, mean + std, color=stdColour)
+    plt.plot(Xtest, mean - std, color=stdColour)
+    plt.fill_between(np.squeeze(Xtest), np.squeeze(mean + std), np.squeeze(mean - std), color=stdColour, alpha=0.2)
+
+
+  plt.scatter(X, Y, s=15)
+
+  plt.show()
+
+'''
+  This code was copied from https://github.com/edwardlib/observations/blob/master/observations/snelson1d.py
+  on 01/05/2020
+'''
+
+from observations.util import maybe_download_and_extract
+
+
+def snelson1d(path):
+  """Load Edward Snelson's 1d regression data set [@snelson2006fitc].
+  It contains 200 examples of a few oscillations of an example function. It has
+  seen extensive use as a toy dataset for illustrating qualitative behaviour of
+  Gaussian process approximations.
+  Args:
+    path: str.
+      Path to directory which either stores file or otherwise file will be
+      downloaded and extracted there. Filenames are `snelson_train_*`.
+  Returns:
+    Tuple of two np.darray `inputs` and `outputs` with 200 rows and 1 column.
+  """
+  path = os.path.expanduser(path)
+  inputs_path = os.path.join(path, 'snelson_train_inputs')
+  outputs_path = os.path.join(path, 'snelson_train_outputs')
+
+  # Contains all source as well. We just need the data.
+  url = 'http://www.gatsby.ucl.ac.uk/~snelson/SPGP_dist.zip'
+
+  if not (os.path.exists(inputs_path) and os.path.exists(outputs_path)):
+    maybe_download_and_extract(path, url)
+
+    # Copy the required data
+    copyfile(os.path.join(path, "SPGP_dist", "train_inputs"), inputs_path)
+    copyfile(os.path.join(path, "SPGP_dist", "train_outputs"), outputs_path)
+
+    # Clean up everything else
+    rmtree(os.path.join(path, "SPGP_dist"))
+    os.remove(os.path.join(path, "SPGP_dist.zip"))
+
+  X = np.loadtxt(os.path.join(inputs_path))[:, None]
+  Y = np.loadtxt(os.path.join(outputs_path))[:, None]
+
+  return X, Y
+
+Xtest = np.arange(0.0, 6.0, 0.01).reshape(-1, 1)
+X, Y = snelson1d(".")
+
 model = loadModel('./model')
 
 str = "True" if test_predictive_cov_is_psd(model) else "False"
@@ -164,10 +240,5 @@ print(str)
 
 str = "Test passed!" if testFeatureequivalence(10e-2) else "Test failed."
 print(str)
-
-kernel = gpflow.kernels.Matern12(variance=5, lengthscales=10.0)
-likelihood = gpflow.likelihoods.Gaussian()
-
-inducing_variable = RVFF_1D( a=0, b=6, M=M )
 
 print( "KL[ q(u) | p(u) ] = %2.3f" % testPriorEqualsPosterior() )
